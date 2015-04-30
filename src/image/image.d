@@ -131,6 +131,25 @@ template colorMap(alias pred)
 	}
 }
 
+auto vFlip(Img)(auto ref Img src) if(isImage!Img)
+{
+
+	struct VFlip
+	{
+		Img src;
+
+		@property size_t width() { return src.width; }
+		@property size_t height() { return src.height; }
+
+		auto ref opIndex(size_t x, size_t y)
+		{
+			return src[x, height-y-1];
+		}
+	}
+
+	return VFlip(src);
+}
+
 auto vertical(Img...)(Img images) if(allSatisfy!(isImage, Img)) // TODO: prove the colours are the same...
 {
 	alias Color = ImageColor!(Img[0]);

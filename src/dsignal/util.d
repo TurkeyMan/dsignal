@@ -161,6 +161,22 @@ auto zeroPhaseWindow(R)(R range)
 }
 
 
+auto matrixFrom2DArray(T)(T[][] array)
+{
+	struct Matrix
+	{
+		T[][] array;
+		size_t width, height;
+
+		auto ref inout(T) opIndex(size_t x, size_t y) inout
+		{
+			return array[x][y];
+		}
+	}
+
+	return Matrix(array, array.length, array[0].length);
+}
+
 auto literalRange(alias value)(size_t length)
 {
 	struct LiteralRange(alias Value)
@@ -174,9 +190,9 @@ auto literalRange(alias value)(size_t length)
 		@property auto back() inout { return value; }
 		void popBack() { --length; }
 		@property auto save() { return this; }
-		auto opIndex(ulong n) inout { return value; }
+		auto opIndex(size_t n) inout { return value; }
 		auto opSlice() inout { return this; }
-		auto opSlice(ulong lower, ulong upper) inout { return typeof(this)(upper-lower); }
+		auto opSlice(size_t lower, size_t upper) inout { return typeof(this)(upper-lower); }
 		alias opDollar = length;
 	}
 
@@ -196,10 +212,46 @@ auto constantRange(T)(T value, size_t length)
 		@property inout(T) back() inout { return value; }
 		void popBack() { --length; }
 		@property auto save() { return this; }
-		inout(T) opIndex(ulong n) inout { return value; }
+		inout(T) opIndex(size_t n) inout { return value; }
 		auto opSlice() inout { return this; }
-		auto opSlice(ulong lower, ulong upper) inout { return typeof(this)(value, upper-lower); }
+		auto opSlice(size_t lower, size_t upper) inout { return typeof(this)(value, upper-lower); }
 		alias opDollar = length;
 	}
 	return ConstantRange!T(value, length);
+}
+
+auto segment(R)(R range, size_t segmentWidth, size_t overlap = 0)
+{
+	import std.algorithm: min, max;
+
+	assert(overlap < segmentWidth, "Invalid overlap");
+
+	struct Segmenter
+	{
+		R range;
+		size_t width, overlap;
+		size_t advance, length;
+
+		@property bool empty() const { return !length; }
+		@property inout(R) front() inout { return length > 0 ? range[0..min(width, $)] : null; }
+		void popFront() { range = length > 1 ? range[advance..$] : range[$..$]; --length; }
+		@property inout(R) back() inout { return length ? range[(length-1)*advance..$] : range[0..$]; }
+		void popBack() { range = length > 1 ? range[0..$-advance] : range[0..0]; --length; }
+		@property auto save() { return this; }
+		inout(R) opIndex(size_t n) inout
+		{
+			size_t offset = n*advance;
+			return range[offset..min(offset+width, $)];
+		}
+		auto opSlice() inout { return this; }
+		inout(Segmenter) opSlice(size_t lower, size_t upper) inout
+		{
+			return inout(Segmenter)(range[lower*advance.. min(upper*advance + overlap, $)], width, overlap, advance, upper-lower);
+		}
+		alias opDollar = length;
+	}
+
+	size_t advance = segmentWidth-overlap;
+	size_t length = range.length > 0 ? ((max(range.length, segmentWidth)-overlap) + (advance-1)) / advance : 0;
+	return Segmenter(range, segmentWidth, overlap, advance, length);
 }
