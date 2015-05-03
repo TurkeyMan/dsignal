@@ -246,12 +246,12 @@ void save(Img)(Img img, const(char)[] filename, ImageFormat format = ImageFormat
 	header.bpp = 24;
 	header.flags = 0x20;
 
-	RGB[] image = (cast(RGB*)&buffer[18])[0 .. w*h];
+	BGR[] image = (cast(BGR*)&buffer[18])[0 .. w*h];
 	size_t i = 0;
 	foreach(y; 0..h)
 	{
 		foreach(x; 0..w)
-			image[i++] = to!RGB(img[x, y]);
+			image[i++] = to!BGR(img[x, y]);
 	}
 
 	import std.file;

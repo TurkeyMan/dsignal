@@ -1,9 +1,9 @@
 module test;
 
-import dsignal.dft;
 import dsignal.fft;
 import dsignal.stft;
 import dsignal.window;
+import dsignal.analyse;
 import dsignal.wave;
 import dsignal.util;
 import graph.plot;
@@ -16,7 +16,6 @@ import std.algorithm: map, reduce, copy, sum, clamp;
 import std.range: chain;
 
 alias Lum = Color!("l", double, ColorSpace.sRGB_l);
-alias lRGB = Color!("rgb", double, ColorSpace.sRGB_l);
 
 void main()
 {
@@ -207,8 +206,7 @@ void testSTFT()
 	p.width = 1.5;
 	p.min = -1; p.max = 1;
 	auto wf = s.samples.dup
-		.plot(512, 256, p)
-		.colorMap!(c => lRGB(1-c, 1, 1-c));
+		.plotWaveform(1024, 256);
 
 	enum WindowSize = 801;
 	enum Hop = 50;
@@ -225,14 +223,13 @@ void testSTFT()
 
 	STFT(s.samples, window[], amplitude, phase, Hop, FFTSize);
 
+	detectPeaks(amplitude[100], 0.5f);
+
 	ISTFT(amplitude, phase, s.samples, window.length, Hop, FFTSize);
 
 	vertical(wf,
-			 s.samples
-			 .plot(512, 256, p)
-			 .colorMap!(c => lRGB(1-c, 1, 1-c)),
-			 amplitude.matrixFrom2DArray.vFlip
-				 .colorMap!(e => lRGB(clamp(toDecibels(e)/150 + 1, 0, 1)))
+			 s.samples.plotWaveform(1024, 256),
+			 amplitude.plotSpectrum
 //			 phase.matrixFrom2DArray.vFlip
 //				 .colorMap!(e => Lum(e*(1/(PI*2) + 0.5))), 
 			 )

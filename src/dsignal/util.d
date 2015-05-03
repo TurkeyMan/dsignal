@@ -2,7 +2,7 @@ module dsignal.util;
 
 public import std.complex;
 import std.math;
-import std.algorithm: map;
+import std.algorithm: map, clamp;
 import std.traits;
 import std.range;
 
@@ -30,6 +30,18 @@ int iFloorLog2(size_t i)
 	import core.bitop;
     assert(i > 0);
 	return bsr(i);
+}
+
+
+auto lerpRange(F, T)(F t, T[] values...)
+{
+	t = clamp(t, F(0), F(1));
+	t *= values.length-1;
+	size_t index = cast(size_t)t;
+	if(index == values.length-1)
+		return values[index];
+	F frac = t - cast(F)index;
+	return values[index]*(1-frac) + values[index+1]*frac;
 }
 
 
@@ -90,11 +102,20 @@ auto phase(R)(R range) if(isForwardRange!R)
 	struct Unwrap
 	{
 		R range;
-		typeof(range.front.re) offset;
+
+		static if(is(ElementType!R == Complex!T, T))
+		{
+			typeof(range.front.re) offset;
+			@property auto front() { return arg(range.front) + offset; }
+		}
+		else
+		{
+			typeof(range.front) offset;
+			@property auto front() { return range.front + offset; }
+		}
 
 		@property bool empty() { return range.empty; }
 		@property size_t length() { return range.length; }
-		@property auto front() { return arg(range.front) + offset; }
 		void popFront()
 		{
 			auto prev = front;

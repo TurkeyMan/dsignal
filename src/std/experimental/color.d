@@ -1,6 +1,6 @@
 module std.experimental.color;
 
-import std.traits: isFloatingPoint, isIntegral, isSigned, isSomeChar;
+import std.traits: isFloatingPoint, isIntegral, isSigned, isSomeChar, Unqual;
 import std.algorithm: canFind;
 import std.typetuple;
 import std.typecons;
@@ -149,7 +149,7 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
                 alias b = l;
         }
         static if(!components.canFind('l'))
-            @property ComponentType l() const { return toGrayscale!colorSpace(r, g, b); }
+            @property ComponentType l() const nothrow @nogc { return toGrayscale!colorSpace(r, g, b); }
         static if(!components.canFind('a'))
             enum ComponentType a = 0;
 
@@ -158,7 +158,12 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
         else
             auto tristimulus() const { return tuple(r, g, b); }
 
-        // RGB/A constructor
+        static if(hasAlpha)
+            auto tristimulusWithAlpha() const { return tuple(tristimulus.expand, a); }
+        else
+            auto tristimulusWithAlpha() const { return tuple(tristimulus.expand, ComponentType(0)); }
+
+        // RGB/A initialiser
         this(ComponentType r, ComponentType g, ComponentType b, ComponentType a = 0)
         {
             static if(components.canFind('r'))
@@ -173,7 +178,7 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
                 this.l = toGrayscale!colorSpace(r, g, b);
         }
 
-        // L/A constructor
+        // L/A initialiser
         this(ComponentType l, ComponentType a = 0)
         {
             static if(components.canFind('l'))
@@ -186,6 +191,12 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
                 this.b = l;
             static if(components.canFind('a'))
                 this.a = a;
+        }
+
+        // Hex string initialiser
+        this(C)(const(C)[] hex) if(isSomeChar!C)
+        {
+            fromHex(hex);
         }
 
         // read hex strings in the standard forms: (#/$/0x)rgb/argb/rrggbb/aarrggbb
@@ -248,28 +259,101 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
         return this.to!C;
     }
 
-    void opUnary(string op)()
+    typeof(this) opUnary(string op)() const pure nothrow @nogc
     {
-        static if(op == '-')
-        {
-            return typeof(this)(-this.tupleof);
-        }
+        Unqual!(typeof(this)) r = this;
+        static if(components.canFind('l'))
+            mixin("r.l = "~op~"l;");
+        static if(components.canFind('r'))
+            mixin("r.r = "~op~"r;");
+        static if(components.canFind('g'))
+            mixin("r.g = "~op~"g;");
+        static if(components.canFind('b'))
+            mixin("r.b = "~op~"b;");
+        static if(components.canFind('a'))
+            mixin("r.a = "~op~"a;");
+        return r;
     }
 
-    void opBinary(string op, C)(C rh)
+    typeof(this) opBinary(string op, C)(C rh) const pure nothrow @nogc if(isColor!C && (op == "+" || op == "-" || op == "*" || op == "/"))
     {
-        static if(op == '*')
-        {
-            auto r = this;
-            r.tupleof *= rh.tupleof;
-            return r;
-        }
+        Unqual!(typeof(this)) r = this;
+        auto arg = cast(typeof(this))rh;
+        static if(components.canFind('l'))
+            mixin("r.l "~op~"= arg.l;");
+        static if(components.canFind('r'))
+            mixin("r.r "~op~"= arg.r;");
+        static if(components.canFind('g'))
+            mixin("r.g "~op~"= arg.g;");
+        static if(components.canFind('b'))
+            mixin("r.b "~op~"= arg.b;");
+        static if(components.canFind('a'))
+            mixin("r.a "~op~"= arg.a;");
+        return r;
     }
 
-    static if(hasAlpha)
-        auto tristimulusWithAlpha() const { return tuple(tristimulus.expand, a); }
-    else
-        auto tristimulusWithAlpha() const { return tuple(tristimulus.expand, ComponentType(0)); }
+    typeof(this) opBinary(string op, F)(F rh) const pure nothrow @nogc if(isFloatingPoint!F && (op == "*" || op == "/" || op == "^^"))
+    {
+        Unqual!(typeof(this)) r = this;
+        static if(components.canFind('l'))
+            mixin("r.l "~op~"= rh;");
+        static if(components.canFind('r'))
+            mixin("r.r "~op~"= rh;");
+        static if(components.canFind('g'))
+            mixin("r.g "~op~"= rh;");
+        static if(components.canFind('b'))
+            mixin("r.b "~op~"= rh;");
+        static if(components.canFind('a'))
+            mixin("r.a "~op~"= rh;");
+        return r;
+    }
+
+    typeof(this) opBinaryRight(string op, F)(F rh) const pure nothrow @nogc if(isFloatingPoint!F && (op == "*" || op == "/"))
+    {
+        Unqual!(typeof(this)) r = this;
+        static if(components.canFind('l'))
+            mixin("r.l "~op~"= rh;");
+        static if(components.canFind('r'))
+            mixin("r.r "~op~"= rh;");
+        static if(components.canFind('g'))
+            mixin("r.g "~op~"= rh;");
+        static if(components.canFind('b'))
+            mixin("r.b "~op~"= rh;");
+        static if(components.canFind('a'))
+            mixin("r.a "~op~"= rh;");
+        return r;
+    }
+
+    ref typeof(this) opOpAssign(string op, C)(C rh) pure nothrow @nogc if(isColor!C && (op == "+" || op == "-" || op == "*" || op == "/"))
+    {
+        auto arg = cast(typeof(this))rh;
+        static if(components.canFind('l'))
+            mixin("l "~op~"= arg.l;");
+        static if(components.canFind('r'))
+            mixin("r "~op~"= arg.r;");
+        static if(components.canFind('g'))
+            mixin("g "~op~"= arg.g;");
+        static if(components.canFind('b'))
+            mixin("b "~op~"= arg.b;");
+        static if(components.canFind('a'))
+            mixin("a "~op~"= arg.a;");
+        return this;
+    }
+
+    ref typeof(this) opOpAssign(string op, F)(F rh) pure nothrow @nogc if(isFloatingPoint!F && (op == "*" || op == "/" || op == "^^"))
+    {
+        static if(components.canFind('l'))
+            mixin("l "~op~"= rh;");
+        static if(components.canFind('r'))
+            mixin("r "~op~"= rh;");
+        static if(components.canFind('g'))
+            mixin("g "~op~"= rh;");
+        static if(components.canFind('b'))
+            mixin("b "~op~"= rh;");
+        static if(components.canFind('a'))
+            mixin("a "~op~"= rh;");
+        return this;
+    }
 }
 
 

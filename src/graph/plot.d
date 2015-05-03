@@ -1,6 +1,7 @@
 module graph.plot;
 
 import image.image;
+import dsignal.util;
 
 import std.range;
 
@@ -209,11 +210,60 @@ struct LineGraphParams
 
 
 
-auto plotSpectrum(R)(R data, size_t width, size_t height, PixelType foreground, PixelType background) if(isForwardRange!R && isForwardRange!(ElementType!R) && is(ElementType!(ElementType!R) : double))
+alias lRGB = Color!("rgb", double, ColorSpace.sRGB_l);
+
+auto plotWaveform(F)(F[] signal, size_t width, size_t height)
 {
-	Image!PixelType img(width, height);
+	static if(isFloatingPoint!F)
+		auto s = signal;
+	else static if(is(F == short))
+		auto s = signal.map!(e => e*(1.0f/short.max));
+	else static if(is(F == ubyte))
+		auto s = signal.map!(e => e*(1.0f/ubyte.max)*2 - 1);
 
-	// draw the spectrum...
+	PlotParams p;
+	p.width = 1.5;
+	p.min = -1; p.max = 1;
+	return s
+		.plot(width, height, p)
+		.colorMap!(c => lRGB(1-c, 1, 1-c));
+}
 
-	return img;
+auto plotAmplitude(F)(F[] signal, size_t width, size_t height)
+{
+	static if(is(F == Complex!T, T))
+		auto s = signal.map!(e => 20*log10(std.complex.abs(e)));
+	else static if(isFloatingPoint!F)
+		auto s = signal.map!(e => 20*log10(e));
+
+	PlotParams p;
+	p.width = 1.5;
+	return s
+		.plot(width, height, p)
+		.colorMap!(c => lRGB(1, 1-c, 1-c));
+}
+
+auto plotPhase(F)(F[] signal, size_t width, size_t height)
+{
+	PlotParams p;
+	p.width = 1.5;
+	return signal.phase.dup
+		.plot(width, height, p)
+		.colorMap!(c => lRGB(1-c, 1-c, 1));
+}
+
+auto plotSpectrum(F)(F[][] signal)
+{
+	static immutable spectrumColours = [
+		lRGB(0,0,1),
+		lRGB(0,1,1),
+		lRGB(1,1,0),
+		lRGB(1,0,0),
+		lRGB(0,0,0)
+	];
+
+	return signal
+		.matrixFrom2DArray
+		.vFlip
+		.colorMap!(e => lerpRange(clamp(toDecibels(e)/200 + 1, 0, 1), spectrumColours));
 }
