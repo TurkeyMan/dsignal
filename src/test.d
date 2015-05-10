@@ -15,6 +15,8 @@ import std.c.stdlib;
 import std.algorithm: map, reduce, copy, sum, clamp;
 import std.range: chain;
 
+import std.stdio;
+
 alias Lum = Color!("l", double, ColorSpace.sRGB_l);
 
 void main()
@@ -23,6 +25,21 @@ void main()
 //	testGraph2();
 //	testSound();
 	testSTFT();
+}
+
+void open(const(char)[] filename)
+{
+	import std.string;
+	version(Windows)
+	{
+		string cmd = ("start " ~ filename).idup;
+		system(cmd.toStringz);
+	}
+	else version(linux)
+	{
+		string cmd = ("xdg-open " ~ filename).idup;
+		system(cmd.toStringz);
+	}
 }
 
 void testGraph()
@@ -106,7 +123,7 @@ void testGraph()
 				horizontal(angleImg, solid(lRGB(), 2, GraphHeight), phaseImg),
 			 )
 		.save("plot.tga");
-	system("start plot.tga");
+	open("plot.tga");
 }
 
 void testGraph2()
@@ -184,7 +201,7 @@ void testGraph2()
 	s.samples = wav;
 	s.save("synth.wav");
 
-	system("start synth.wav");
+	open("synth.wav");
 }
 
 
@@ -193,13 +210,13 @@ void testSound()
 	Sound s = load("save.wav");
 	s.save("synth.wav");
 
-	system("start synth.wav");
+	open("synth.wav");
 }
 
 void testSTFT()
 {
 	// get some data
-	Sound s = load("save.wav");
+	Sound s = load("fair.wav");
 
 	// signal image
 	PlotParams p;
@@ -223,7 +240,7 @@ void testSTFT()
 
 	STFT(s.samples, window[], amplitude, phase, Hop, FFTSize);
 
-	detectPeaks(amplitude[100], 0.5f);
+//	detectPeaks(amplitude[100], 0.5f);
 
 	ISTFT(amplitude, phase, s.samples, window.length, Hop, FFTSize);
 
@@ -235,8 +252,8 @@ void testSTFT()
 			 )
 		.save("plot.tga");
 
-	system("start plot.tga");
+	open("plot.tga");
 
 	s.save("synth.wav");
-//	system("start synth.wav");
+//	open("synth.wav");
 }

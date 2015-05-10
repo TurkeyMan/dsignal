@@ -48,7 +48,9 @@ Sound load(const(char)[] filename, SoundFormat format = SoundFormat.Wav)
 	if(formatChunk.wBitsPerSample == 8)
 	{
 		samples = new float[sampleData.length];
-		assert(false, "TODO");
+		ubyte[] sam = cast(ubyte[])sampleData;
+		foreach(i, ref s; samples)
+			s = sam[i]*(2.0f/ubyte.max)-1.0;
 	}
 	else if(formatChunk.wBitsPerSample == 16)
 	{
