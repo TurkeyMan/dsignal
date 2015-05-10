@@ -2,6 +2,7 @@ module image.image;
 
 public import std.experimental.color;
 import std.typetuple: allSatisfy;
+import std.typecons: tuple;
 
 // This code was inspired by Vladimir Panteleev's excellent article:
 // http://blog.thecybershadow.net/2014/03/21/functional-image-processing-in-d/
@@ -48,6 +49,14 @@ struct Image(Color)
 	this(size_t width, size_t height)
 	{
 		size(width, height);
+	}
+
+	this(Color pixels[], size_t width, size_t height)
+	{
+		assert(pixels.length == width*height);
+		this.pixels = pixels;
+		this.width = width;
+		this.height = height;
 	}
 
 	void size(size_t width, size_t height)
@@ -114,7 +123,7 @@ template colorMap(alias pred)
 		alias SrcColor = ImageColor!Img;
 		alias DestColor = typeof(pred(SrcColor.init));
 
-		struct Map
+		struct ColorMap
 		{
 			Img src;
 
@@ -127,13 +136,29 @@ template colorMap(alias pred)
 			}
 		}
 
-		return Map(src);
+		return ColorMap(src);
 	}
+}
+
+auto coordMap(alias pred, Img)(auto ref Img src) if(isImage!Img)
+{
+	struct CoordMap
+	{
+		Img src;
+
+		@property size_t width() { return src.width; }
+		@property size_t height() { return src.height; }
+
+		auto ref opIndex(size_t x, size_t y)
+		{
+			return src[pred(x, y, width, height).expand];
+		}
+	}
+	return CoordMap(src);
 }
 
 auto vFlip(Img)(auto ref Img src) if(isImage!Img)
 {
-
 	struct VFlip
 	{
 		Img src;
@@ -146,7 +171,6 @@ auto vFlip(Img)(auto ref Img src) if(isImage!Img)
 			return src[x, height-y-1];
 		}
 	}
-
 	return VFlip(src);
 }
 

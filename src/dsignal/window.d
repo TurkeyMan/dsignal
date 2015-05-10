@@ -3,6 +3,7 @@ module dsignal.window;
 import std.math;
 import std.traits;
 
+@safe: pure: nothrow:
 
 enum WindowType
 {
@@ -21,6 +22,8 @@ T[] generateWindow(T)(WindowType type, size_t N)
 	generateWindow(type, w);
 	return w;
 }
+
+@nogc:
 
 void generateWindow(T)(WindowType type, T[] output)
 {

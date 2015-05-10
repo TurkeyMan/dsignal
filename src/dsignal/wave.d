@@ -3,6 +3,7 @@ module dsignal.wave;
 public import std.complex;
 import std.math;
 
+@safe: pure: nothrow:
 
 Complex!F[] generateSinusoid(F)(size_t N, F periods)
 {
@@ -11,7 +12,7 @@ Complex!F[] generateSinusoid(F)(size_t N, F periods)
 	return w;
 }
 
-void generateSinusoid(F)(Complex!F[] output, F periods)
+void generateSinusoid(F)(Complex!F[] output, F periods) @nogc
 {
 	ptrdiff_t N = output.length;
 	F t = -0.5;
@@ -31,7 +32,7 @@ T[] generateSinewave(T)(size_t N, T periods)
 	return w;
 }
 
-void generateSinewave(T)(T[] output, T periods)
+void generateSinewave(T)(T[] output, T periods) @nogc
 {
 	ptrdiff_t N = output.length;
 	T t = -0.5;
@@ -51,7 +52,7 @@ T[] generateSinewave(T)(size_t N, T freq, T sampleRate, T phase = 0, T amplitude
 	return w;
 }
 
-void generateSinewave(T)(T[] output, T freq, T sampleRate, T phase = 0, T amplitude = 1)
+void generateSinewave(T)(T[] output, T freq, T sampleRate, T phase = 0, T amplitude = 1) @nogc
 {
 	size_t N = output.length;
 	double time = N/sampleRate;

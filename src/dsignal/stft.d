@@ -8,6 +8,8 @@ import std.c.stdlib;
 import std.range: retro, chain, zip;
 import std.typecons;
 
+nothrow: @nogc:
+
 alias FFTDirection = dsignal.fft.FFTDirection;
 
 F[][] STFT(F)(const(F)[] signal, const(F)[] window, F[][] amplitude, F[][] phase, size_t hop, size_t fftSize, FFTDirection direction = FFTDirection.Forward)

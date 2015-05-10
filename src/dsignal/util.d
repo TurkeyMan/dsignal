@@ -6,6 +6,8 @@ import std.algorithm: map, clamp;
 import std.traits;
 import std.range;
 
+@safe: pure: nothrow: @nogc:
+
 ulong nextPowerOf2(ulong n)
 {
 	n--;
@@ -19,7 +21,7 @@ ulong nextPowerOf2(ulong n)
 	return n;
 }
 
-bool isPowerOf2(size_t sz) @safe pure nothrow @nogc
+bool isPowerOf2(size_t sz)
 {
     return (sz & (sz-1)) == 0;
 }
@@ -273,6 +275,6 @@ auto segment(R)(R range, size_t segmentWidth, size_t overlap = 0)
 	}
 
 	size_t advance = segmentWidth-overlap;
-	size_t length = range.length > 0 ? ((max(range.length, segmentWidth)-overlap) + (advance-1)) / advance : 0;
+	size_t length = (range.length < segmentWidth ? 0 : 1) + (range.length - segmentWidth)/advance;
 	return Segmenter(range, segmentWidth, overlap, advance, length);
 }

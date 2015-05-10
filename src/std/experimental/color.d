@@ -151,7 +151,7 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
         static if(!components.canFind('l'))
             @property ComponentType l() const nothrow @nogc { return toGrayscale!colorSpace(r, g, b); }
         static if(!components.canFind('a'))
-            enum ComponentType a = 0;
+            enum ComponentType a = 1;
 
         static if(components.canFind('l'))
             auto tristimulus() const { auto t = l; return tuple(t, t, t); }
@@ -161,10 +161,10 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
         static if(hasAlpha)
             auto tristimulusWithAlpha() const { return tuple(tristimulus.expand, a); }
         else
-            auto tristimulusWithAlpha() const { return tuple(tristimulus.expand, ComponentType(0)); }
+            auto tristimulusWithAlpha() const { return tuple(tristimulus.expand, ComponentType(1)); }
 
         // RGB/A initialiser
-        this(ComponentType r, ComponentType g, ComponentType b, ComponentType a = 0)
+        this(ComponentType r, ComponentType g, ComponentType b, ComponentType a = 1)
         {
             static if(components.canFind('r'))
                 this.r = r;
@@ -179,7 +179,7 @@ struct Color(string components_, ComponentType_, ColorSpace colorSpace_ = ColorS
         }
 
         // L/A initialiser
-        this(ComponentType l, ComponentType a = 0)
+        this(ComponentType l, ComponentType a = 1)
         {
             static if(components.canFind('l'))
                 this.l = l;

@@ -5,10 +5,43 @@ import std.math;
 import std.algorithm: map, copy;
 import dsignal.util;
 
+@safe: pure: nothrow: @nogc:
+
 enum FFTDirection
 {
     Forward = 0,
     Reverse = 1
+}
+
+
+F binForFrequency(F)(F freq, size_t samplerate, size_t totalBins)
+{
+	return freq*totalBins / samplerate;
+}
+
+F frequencyForBin(F)(F bin, size_t samplerate, size_t totalBins)
+{
+	return bin*samplerate / totalBins;
+}
+
+F[] getBinFrequencies(F)(size_t fftWidth, size_t sampleRate, F[] bins)
+{
+	double scale = double(sampleRate)/double(fftWidth);
+	foreach(i; 0..fftWidth)
+		bins[i] = F(i*scale);
+	return bins[0..fftWidth];
+}
+
+F freqFromNote(F)(F halfStepsFromA4, F A4 = F(440))
+{
+	enum double a = log(2)/12;
+	return A4*a^^halfStepsFromA4;
+}
+
+F noteFromFreq(F)(F freq, F A4 = F(440))
+{
+	enum a = 2.0 ^^(1.0/12.0);
+	return (freq/A4)/a;
 }
 
 
@@ -90,10 +123,10 @@ auto FFTAnalyse(F)(const(F)[] signal, Complex!F[] buffer)
 	return buffer;
 }
 
-auto FFTSynth(F)(Complex!F[] buffer, size_t outputSamples = 0)
+auto FFTSynth(F)(Complex!F[] buffer, size_t windowSize = 0)
 {
 	IFFT(buffer);
-	return buffer.unpadd!true(outputSamples ? outputSamples : buffer.length).map!(e => e.re);
+	return buffer.unpadd!true(windowSize ? windowSize : buffer.length).map!(e => e.re);
 }
 
 auto FFTSynth(F)(Complex!F[] buffer, F[] output)

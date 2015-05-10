@@ -231,6 +231,8 @@ auto plotWaveform(F)(F[] signal, size_t width, size_t height)
 
 auto plotAmplitude(F)(F[] signal, size_t width, size_t height)
 {
+	import std.math: log10;
+
 	static if(is(F == Complex!T, T))
 		auto s = signal.map!(e => 20*log10(std.complex.abs(e)));
 	else static if(isFloatingPoint!F)
@@ -238,6 +240,7 @@ auto plotAmplitude(F)(F[] signal, size_t width, size_t height)
 
 	PlotParams p;
 	p.width = 1.5;
+	p.min = -120; p.max = 0;
 	return s
 		.plot(width, height, p)
 		.colorMap!(c => lRGB(1, 1-c, 1-c));
@@ -254,7 +257,7 @@ auto plotPhase(F)(F[] signal, size_t width, size_t height)
 
 auto plotSpectrum(F)(F[][] signal)
 {
-	static immutable spectrumColours = [
+	static spectrumColours = [
 		lRGB(0,0,1),
 		lRGB(0,1,1),
 		lRGB(1,1,0),
@@ -264,6 +267,7 @@ auto plotSpectrum(F)(F[][] signal)
 
 	return signal
 		.matrixFrom2DArray
+		.coordMap!((x, y, w, h) => tuple(x, cast(size_t)((double(y)/h)^^2.0*h)))
 		.vFlip
 		.colorMap!(e => lerpRange(clamp(toDecibels(e)/200 + 1, 0, 1), spectrumColours));
 }
