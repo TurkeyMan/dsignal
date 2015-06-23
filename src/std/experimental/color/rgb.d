@@ -11,7 +11,7 @@
 module std.experimental.color.rgb;
 
 import std.experimental.color;
-import std.experimental.color.conv: convertColor;
+import std.experimental.color.conv;
 
 import std.traits: isInstanceOf, isNumeric, isIntegral, isFloatingPoint, isSigned, isSomeChar, Unqual;
 import std.typetuple: TypeTuple;
@@ -48,31 +48,13 @@ enum RGBColorSpace
     /** sRGB with gamma 2.2 */
     sRGB_Gamma2_2,
 
-/+ TODO: these all need testing
-    AdobeRGB,
-    AppleRGB,
-    BestRGB,
-    BetaRGB,
-    BruceRGB,
-    CIE_RGB,
-    ColorMatchRGB,
-    DonRGB4,
-//    ECI_RGB_v2,
-    EktaSpacePS5,
-    NTSC_RGB,
-    PAL_SECAM_RGB,
-    ProPhotoRGB,
-    SMPTE_C_RGB,
-    WideGamutRGB
-+/
-
     // custom color space will disable automatic color spoace conversions
     custom = -1
 }
 
 
 /**
-An RGB color, parameterised with components, component type, and colour space specification.
+An RGB color, parameterised with components, component type, and color space specification.
 
 Params: components_ = Components that shall be available. Struct is populated with components in the order specified.
                       Valid components are:
@@ -160,7 +142,7 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
         foreach(c; TypeTuple!("r","g","b","a"))
             mixin(ComponentExpression!("this._ = _;", c, null));
         static if(canFind!(components, 'l'))
-            this.l = toGrayscale!colorSpace(r, g, b); // ** Contentious? I this this is most useful
+            this.l = toGrayscale!(linear, colorSpace)(r, g, b); // ** Contentious? I this this is most useful
     }
 
     // L/A initialiser
@@ -238,46 +220,18 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
 
 private:
     alias AllComponents = TypeTuple!("l","r","g","b","a");
-    alias ParentColourSpace = XYZ!(FloatTypeFor!ComponentType);
-}
-
-
-// TODO: represent packed colors, eg R5G6B5, etc
-struct PackedRGB(string format, bool linear_ = false, RGBColorSpace colorSpace_ = RGBColorSpace.sRGB)
-{
-@safe: pure: nothrow: @nogc:
-
-    // RGB colors may only contain components 'rgb', or 'l' (luminance)
-    // They may also optionally contain an 'a' (alpha) component, and 'x' (unused) components
-    static assert(allIn!("rgblax", components), "Invalid Color component '"d ~ notIn!("rgblax", components) ~ "'. RGB colors may only contain components: r, g, b, l, a, x"d);
-    static assert(anyIn!("rgbal", components), "RGB colors must contain at least one component of r, g, b, l, a.");
-    static assert(!canFind!(components, 'l') || !anyIn!("rgb", components), "RGB colors may not contain rgb AND luminance components together.");
-
-    // create members for some useful information
-    alias UnpackedComponentType = ubyte; // RGBA1010102 should be ushort, etc
-    enum string components = format; // TODO: strip sizes from format ('rgb565' => 'rgb')
-    enum RGBColorSpace colorSpace = colorSpace_;
-    enum bool linear = linear_;
-
-    // TODO: we'll try and fabricate the packing algorithm based on the format string
-    //...
-
-    void pack(C)(C color);
-    C unpack(C)();
-
-private:
-    alias ParentColourSpace = RGB!(components, UnpackedComponentType, linear_, colorSpace_);
+    alias ParentColor = XYZ!(FloatTypeFor!ComponentType);
 }
 
 
 // gamma ramp conversions
-/** Convert a value from a color space's gamma to linear. */
+/** Convert a value from gamma compressed space to linear. */
 T toLinear(RGBColorSpace src, T)(T v) if(isFloatingPoint!T)
 {
     enum ColorSpace = RGBColorSpaceDefs!T[src];
     return ColorSpace.toLinear(v);
 }
-/** Convert a value to a color space's gamma. */
+/** Convert a value to gamma compressed space. */
 T toGamma(RGBColorSpace src, T)(T v) if(isFloatingPoint!T)
 {
     enum ColorSpace = RGBColorSpaceDefs!T[src];
@@ -285,12 +239,12 @@ T toGamma(RGBColorSpace src, T)(T v) if(isFloatingPoint!T)
 }
 
 /** Convert a color to linear space. */
-auto toLinear(C)(C color) const if(isRGB!C)
+auto toLinear(C)(C color) if(isRGB!C)
 {
     return cast(RGB!(C.components, C.ComponentType, true, C.colorSpace))color;
 }
 /** Convert a color to gamma space. */
-auto toGamma(C)(C color) const if(isRGB!C)
+auto toGamma(C)(C color) if(isRGB!C)
 {
     return cast(RGB!(C.components, C.ComponentType, false, C.colorSpace))color;
 }
@@ -298,7 +252,7 @@ auto toGamma(C)(C color) const if(isRGB!C)
 
 package:
 //
-// Below exists a bunch of machinery for converting between RGB colour spaces
+// Below exists a bunch of machinery for converting between RGB color spaces
 //
 
 import std.experimental.color.xyz;
@@ -322,34 +276,15 @@ struct RGBColorSpaceDef(F)
 enum RGBColorSpaceDefs(F) = [
     RGBColorSpaceDef!F("sRGB",           &linearTosRGB!F,         &sRGBToLinear!F,         WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.212656), xyY!F(0.3000, 0.6000, 0.715158), xyY!F(0.1500, 0.0600, 0.072186)),
     RGBColorSpaceDef!F("sRGB Simple",    &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.212656), xyY!F(0.3000, 0.6000, 0.715158), xyY!F(0.1500, 0.0600, 0.072186)),
-
-/+ TODO: these all need testing to prove they are correct
-    // ** adobe seen using gamma 2.19921875 ???
-    RGBColorSpaceDef!F("Adobe RGB",      &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.297361), xyY!F(0.2100, 0.7100, 0.627355), xyY!F(0.1500, 0.0600, 0.075285)),
-    RGBColorSpaceDef!F("Apple RGB",      &linearToGamma!(F, 1.8), &gammaToLinear!(F, 1.8), WhitePoint!F.D65, xyY!F(0.6250, 0.3400, 0.244634), xyY!F(0.2800, 0.5950, 0.672034), xyY!F(0.1550, 0.0700, 0.083332)),
-    RGBColorSpaceDef!F("Best RGB",       &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D50, xyY!F(0.7347, 0.2653, 0.228457), xyY!F(0.2150, 0.7750, 0.737352), xyY!F(0.1300, 0.0350, 0.034191)),
-    RGBColorSpaceDef!F("Beta RGB",       &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D50, xyY!F(0.6888, 0.3112, 0.303273), xyY!F(0.1986, 0.7551, 0.663786), xyY!F(0.1265, 0.0352, 0.032941)),
-    RGBColorSpaceDef!F("Bruce RGB",      &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.240995), xyY!F(0.2800, 0.6500, 0.683554), xyY!F(0.1500, 0.0600, 0.075452)),
-    RGBColorSpaceDef!F("CIE RGB",        &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.E,   xyY!F(0.7350, 0.2650, 0.176204), xyY!F(0.2740, 0.7170, 0.812985), xyY!F(0.1670, 0.0090, 0.010811)),
-    RGBColorSpaceDef!F("ColorMatch RGB", &linearToGamma!(F, 1.8), &gammaToLinear!(F, 1.8), WhitePoint!F.D50, xyY!F(0.6300, 0.3400, 0.274884), xyY!F(0.2950, 0.6050, 0.658132), xyY!F(0.1500, 0.0750, 0.066985)),
-    RGBColorSpaceDef!F("Don RGB 4",      &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D50, xyY!F(0.6960, 0.3000, 0.278350), xyY!F(0.2150, 0.7650, 0.687970), xyY!F(0.1300, 0.0350, 0.033680)),
-//    RGBColorSpaceDef!F("ECI RGB v2",     L*,                                               WhitePoint!F.D50, xyY!F(0.6700, 0.3300, 0.320250), xyY!F(0.2100, 0.7100, 0.602071), xyY!F(0.1400, 0.0800, 0.077679)),
-    RGBColorSpaceDef!F("Ekta Space PS5", &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D50, xyY!F(0.6950, 0.3050, 0.260629), xyY!F(0.2600, 0.7000, 0.734946), xyY!F(0.1100, 0.0050, 0.004425)),
-    RGBColorSpaceDef!F("NTSC RGB",       &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.C,   xyY!F(0.6700, 0.3300, 0.298839), xyY!F(0.2100, 0.7100, 0.586811), xyY!F(0.1400, 0.0800, 0.114350)),
-    RGBColorSpaceDef!F("PAL/SECAM RGB",  &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.222021), xyY!F(0.2900, 0.6000, 0.706645), xyY!F(0.1500, 0.0600, 0.071334)),
-    RGBColorSpaceDef!F("ProPhoto RGB",   &linearToGamma!(F, 1.8), &gammaToLinear!(F, 1.8), WhitePoint!F.D50, xyY!F(0.7347, 0.2653, 0.288040), xyY!F(0.1596, 0.8404, 0.711874), xyY!F(0.0366, 0.0001, 0.000086)),
-    RGBColorSpaceDef!F("SMPTE-C RGB",    &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D65, xyY!F(0.6300, 0.3400, 0.212395), xyY!F(0.3100, 0.5950, 0.701049), xyY!F(0.1550, 0.0700, 0.086556)),
-    RGBColorSpaceDef!F("Wide Gamut RGB", &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D50, xyY!F(0.7350, 0.2650, 0.258187), xyY!F(0.1150, 0.8260, 0.724938), xyY!F(0.1570, 0.0180, 0.016875))
-+/
 ];
 
 template RGBColorSpaceMatrix(RGBColorSpace cs, F)
 {
     enum F[3] ToXYZ(xyY!F c) = [ c.x/c.y, F(1), (F(1)-c.x-c.y)/c.y ];
 
-    // get the colour space definition
+    // get the color space definition
     enum def = RGBColorSpaceDefs!F[cs];
-    // build a matrix from the 3 colour vectors
+    // build a matrix from the 3 color vectors
     enum r = def.red, g = def.green, b = def.blue;
     enum m = transpose([ ToXYZ!r, ToXYZ!g, ToXYZ!b ]);
 
@@ -357,7 +292,7 @@ template RGBColorSpaceMatrix(RGBColorSpace cs, F)
     enum w = [ (cast(XYZ!F)(def.white)).tupleof ];
     enum s = multiply(inverse(m), w);
 
-    // return colourspace matrix (RGB -> XYZ)
+    // return colorspace matrix (RGB -> XYZ)
     enum F[3][3] RGBColorSpaceMatrix = [[ m[0][0]*s[0], m[0][1]*s[1], m[0][2]*s[2] ],
                                         [ m[1][0]*s[0], m[1][1]*s[1], m[1][2]*s[2] ],
                                         [ m[2][0]*s[0], m[2][1]*s[1], m[2][2]*s[2] ]];
@@ -388,28 +323,30 @@ T gammaToLinear(T, T gamma)(T v) if(isFloatingPoint!T)
     return v^^T(gamma);
 }
 
-T toGrayscale(RGBColorSpace colorSpace = RGBColorSpace.sRGB, T)(T r, T g, T b) pure if(isFloatingPoint!T)
+T toGrayscale(bool linear, RGBColorSpace colorSpace = RGBColorSpace.sRGB, T)(T r, T g, T b) pure if(isFloatingPoint!T)
 {
-    // TODO: this function only works for sRGB!
-    // *** others will compile, and produce wrong results!
-/*
-    TODO: do i have this function right? am i in the wrong space?
+    // calculate the luminance (Y) value by multiplying the Y row of the XYZ matrix with the color
+    enum YAxis = RGBColorSpaceMatrix!(colorSpace, T)[1];
 
-    // i think this is the linear conversion coefficients
-    wiki = 0.299r + 0.587g + 0.114b
-    ps: (0.3)+(0.59)+(0.11)
+    static if(linear)
+    {
+        return YAxis[0]*r + YAxis[1]*g + YAxis[2]*b;
+    }
+    else
+    {
+        // precise; convert to linear, then convert
+        return toGamma!colorSpace(YAxis[0]*toLinear!colorSpace(r) + YAxis[1]*toLinear!colorSpace(g) + YAxis[2]*toLinear!colorSpace(b));
 
-    // but gimp source seems to use this one... perhaps this performs an sRGB space estimate, or is THIS the linear one?
-    gimp: 0.21 R + 0.72 G + 0.07 B
-    another = 0.2126 R + 0.7152 G + 0.0722 B   (apparently in linear space?)
-*/
-    return toGamma!colorSpace(T(0.299)*toLinear!colorSpace(r) + T(0.587)*toLinear!colorSpace(g) + T(0.114)*toLinear!colorSpace(b));
+        // fast (standardised) approximations, performed in sRGB gamma space
+//        return T(0.299)*r + T(0.587)*g + T(0.114)*b; // Y'UV (PAL/NSTC/SECAM)
+//        return T(0.2126)*r + T(0.7152)*g + T(0.0722)*b; // HDTV
+    }
 }
-T toGrayscale(RGBColorSpace colorSpace = RGBColorSpace.sRGB, T)(T r, T g, T b) pure if(isIntegral!T)
+T toGrayscale(bool linear, RGBColorSpace colorSpace = RGBColorSpace.sRGB, T)(T r, T g, T b) pure if(isIntegral!T)
 {
     import std.experimental.color.conv: convertPixelType;
     alias F = FloatTypeFor!T;
-    return convertPixelType!T(toGrayscale!colorSpace(convertPixelType!F(r), convertPixelType!F(g), convertPixelType!F(b)));
+    return convertPixelType!T(toGrayscale!(linear, colorSpace)(convertPixelType!F(r), convertPixelType!F(g), convertPixelType!F(b)));
 }
 
 
@@ -453,41 +390,6 @@ unittest
     static assert(!allIn!("string", "sgix"));
     static assert(anyIn!("string", "sx"));
     static assert(!anyIn!("string", "x"));
-}
-
-
-
-// try and use the preferred float type, but if the int type exceeds the preferred float precision, we'll upgrade the float
-template FloatTypeFor(IntType, RequestedFloat = float)
-{
-    static if(IntType.sizeof > 2)
-        alias FloatTypeFor = double;
-    else
-        alias FloatTypeFor = RequestedFloat;
-}
-
-// find the fastest type to do format conversion without losing precision
-template WorkingType(From, To)
-{
-    static if(isIntegral!From && isIntegral!To)
-    {
-        // small integer types can use float and not lose precision
-        static if(From.sizeof <= 2 && To.sizeof <= 2)
-            alias WorkingType = float;
-        else
-            alias WorkingType = double;
-    }
-    else static if(isIntegral!From && isFloatingPoint!To)
-        alias WorkingType = To;
-    else static if(isFloatingPoint!From && isIntegral!To)
-        alias WorkingType = FloatTypeFor!To;
-    else
-    {
-        static if(From.sizeof > To.sizeof)
-            alias WorkingType = From;
-        else
-            alias WorkingType = To;
-    }
 }
 
 

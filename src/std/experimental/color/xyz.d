@@ -160,7 +160,7 @@ struct xyY(F = float) if(isFloatingPoint!F)
     mixin ColorOperators!(TypeTuple!("x","y","Y"));
 
 private:
-    alias ParentColourSpace = XYZ!ComponentType;
+    alias ParentColor = XYZ!ComponentType;
 }
 
 unittest

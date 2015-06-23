@@ -4,21 +4,37 @@ import std.experimental.color;
 import std.experimental.color.rgb;
 import std.experimental.color.xyz;
 
-import std.traits: isNumeric, isIntegral, isFloatingPoint, isSigned;
+import std.traits: isNumeric, isIntegral, isFloatingPoint, isSigned, TemplateOf;
 import std.typetuple: TypeTuple;
-
 
 // TODO: convert function that finds a path from one color space to another, and performs intermediary conversions
 //...
 
-// std.conv style to!RGB function
-To convertColor(To, From)(From color) if(isRGB!To && isRGB!From)
+// function that implements gigantic conversion matrix
+
+/**
+Convert between color types.
+*/
+To convertColor(To, From)(From color) if(isColor!To && isColor!From)
 {
+    // no conversion is necessary
     static if(is(To == From))
-    {
         return color;
+
+    // *** XYZ is the root type ***
+    else static if(isXYZ!From && isXYZ!To)
+    {
+        alias F = To.ComponentType;
+        return To(F(color.X), F(color.Y), F(color.Z));
     }
-    else
+
+    // following conversions come in triplets:
+    //   Type!U -> Type!V
+    //   Type -> Parent
+    //   Parent -> type
+
+    // *** RGB triplet ***
+    else static if(isRGB!From && isRGB!To)
     {
         alias ToType = To.ComponentType;
         alias FromType = From.ComponentType;
@@ -26,7 +42,7 @@ To convertColor(To, From)(From color) if(isRGB!To && isRGB!From)
         auto src = color.tristimulusWithAlpha;
 
         static if(false && From.colorSpace == To.colorSpace && isIntegral!FromType && FromType.sizeof <= 2 &&
-                  (From.linear != To.linear || !is(FromType == ToType)))
+                    (From.linear != To.linear || !is(FromType == ToType)))
         {
             alias WorkType = WorkingType!(FromType, ToType);
             enum NumValues = 1 << (FromType.sizeof*8);
@@ -92,6 +108,80 @@ To convertColor(To, From)(From color) if(isRGB!To && isRGB!From)
                 return To(convertPixelType!ToType(r), convertPixelType!ToType(g), convertPixelType!ToType(b));
         }
     }
+    else static if(isRGB!From && isXYZ!To)
+    {
+        alias ToType = To.ComponentType;
+        alias FromType = From.ComponentType;
+        alias WorkType = WorkingType!(FromType, ToType);
+
+        // unpack the working values
+        auto src = color.tristimulus;
+        WorkType r = convertPixelType!WorkType(src[0]);
+        WorkType g = convertPixelType!WorkType(src[1]);
+        WorkType b = convertPixelType!WorkType(src[2]);
+
+        static if(From.linear == false)
+        {
+            r = toLinear!(From.colorSpace)(r);
+            g = toLinear!(From.colorSpace)(g);
+            b = toLinear!(From.colorSpace)(b);
+        }
+
+        // transform to XYZ
+        enum toXYZ = RGBColorSpaceMatrix!(From.colorSpace, WorkType);
+        WorkType[3] v = multiply(toXYZ, [r, g, b]);
+        return To(v[0], v[1], v[2]);
+    }
+    else static if(isXYZ!From && isRGB!To)
+    {
+        alias ToType = To.ComponentType;
+        alias FromType = From.ComponentType;
+        alias WorkType = WorkingType!(FromType, ToType);
+
+        enum toRGB = inverse(RGBColorSpaceMatrix!(To.colorSpace, WorkType));
+        WorkType[3] v = multiply(toRGB, [ WorkType(color.X), WorkType(color.Y), WorkType(color.Z) ]);
+
+        static if(To.linear == false)
+        {
+            v[0] = toGamma!(To.colorSpace)(v[0]);
+            v[1] = toGamma!(To.colorSpace)(v[1]);
+            v[2] = toGamma!(To.colorSpace)(v[2]);
+        }
+
+        return To(convertPixelType!ToType(v[0]), convertPixelType!ToType(v[1]), convertPixelType!ToType(v[2]));
+    }
+
+    // *** xyY triplet ***
+    else static if(isxyY!From && isxyY!To)
+    {
+        alias F = To.ComponentType;
+        return To(F(color.x), F(color.y), F(color.Y));
+    }
+    else static if(isxyY!From && isXYZ!To)
+    {
+        alias F = To.ComponentType;
+        if(color.y == F(0))
+            return To(F(0), F(0), F(0));
+        else
+            return To(F(color.x*color.Y/color.y), F(color.Y), F((F(1)-color.x-color.y)*color.Y/color.y));
+    }
+    else static if(isXYZ!From && isxyY!To)
+    {
+        alias F = To.ComponentType;
+        auto sum = color.X + color.Y + color.Z;
+        if(sum == F(0))
+            return To(WhitePoint!F.D65.x, WhitePoint!F.D65.y, F(0));
+        else
+            return To(F(color.X/sum), F(color.Y/sum), F(color.Y));
+    }
+
+    // *** fallback plan ***
+    else
+    {
+        // cast along a conversion path to reach our target conversion
+        alias Path = ConversionPath!(From, To);
+        return convertColor!To(convertColor!(Path[0])(color));
+    }
 }
 
 unittest
@@ -109,8 +199,11 @@ unittest
     static assert(cast(FloatRGBA)UnsignedRGB(0xFF,0x80,0)                  == FloatRGBA(1,float(0x80)/float(0xFF),0,0));
     static assert(cast(FloatRGBA)SignedRGBX(127,-127,-128)                 == FloatRGBA(1,-1,-1,0));
 
+    // test greyscale conversion
+    alias UnsignedL = RGB!("l", ubyte);
+    assert(cast(UnsignedL)UnsignedRGB(0xFF,0x20,0x40)   == UnsignedL(0x83));
 
-    // test color space conversions
+    // alias a bunch of types for testing
     alias sRGBA = RGB!("rgba", ubyte, false, RGBColorSpace.sRGB);
     alias lRGBA = RGB!("rgba", ushort, true, RGBColorSpace.sRGB);
     alias gRGBA = RGB!("rgba", byte, false, RGBColorSpace.sRGB_Gamma2_2);
@@ -119,108 +212,25 @@ unittest
     alias gRGBAf = RGB!("rgba", float, false, RGBColorSpace.sRGB_Gamma2_2);
     alias XYZf = XYZ!float;
 
-    // TODO... we can't test this since DMD can't CTFE the '^^' operator! >_<
+    // TODO... we can't test this properly since DMD can't CTFE the '^^' operator! >_<
 
-    // do a bunch of conversions
-    assert(cast(lRGBA)sRGBA(0xFF, 0xFF, 0xFF, 0xFF) == lRGBA(0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF));
-    assert(cast(gRGBA)sRGBA(0xFF, 0x80, 0x01, 0xFF) == gRGBA(0x7F, 0x3F, 0x03, 0x7F));
+    // test RGB conversions
+    assert(cast(lRGBA)sRGBA(0xFF, 0xFF, 0xFF, 0xFF)           == lRGBA(0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF));
+    assert(cast(gRGBA)sRGBA(0xFF, 0x80, 0x01, 0xFF)           == gRGBA(0x7F, 0x3F, 0x03, 0x7F));
     assert(cast(sRGBA)cast(XYZf)sRGBA(0xFF, 0xFF, 0xFF, 0xFF) == sRGBA(0xFF, 0xFF, 0xFF, 0));
+    //...
+
+    // test PackedRGB conversions
+    //...
+
+    // test xyY conversions
+    //...
 }
 
 
-To convertColor(To, From)(From color) if(isRGB!To && isXYZ!From)
-{
-    alias ToType = To.ComponentType;
-    alias FromType = From.ComponentType;
-    alias WorkType = WorkingType!(FromType, ToType);
-
-    enum toRGB = inverse(RGBColorSpaceMatrix!(To.colorSpace, WorkType));
-    WorkType[3] v = multiply(toRGB, [ WorkType(color.X), WorkType(color.Y), WorkType(color.Z) ]);
-
-    static if(To.linear == false)
-    {
-        v[0] = toGamma!(To.colorSpace)(v[0]);
-        v[1] = toGamma!(To.colorSpace)(v[1]);
-        v[2] = toGamma!(To.colorSpace)(v[2]);
-    }
-
-    return To(convertPixelType!ToType(v[0]), convertPixelType!ToType(v[1]), convertPixelType!ToType(v[2]));
-}
-To convertColor(To, From)(From color) if(isRGB!To && isxyY!From)
-{
-    return to!To(XYZ!(From.ComponentType)(color));
-}
-
-unittest
-{
-    // test XYZ -> RGB is working
-}
-
-
-
-
-
-// std.conv style to!XYZ function
-To convertColor(To, From)(From color) if(isXYZ!To && isXYZ!From)
-{
-    alias F = To.ComponentType;
-    return To(F(color.X), F(color.Y), F(color.Z));
-}
-To convertColor(To, From)(From color) if(isxyY!To && isxyY!From)
-{
-    alias F = To.ComponentType;
-    return To(F(color.x), F(color.y), F(color.Y));
-}
-
-To convertColor(To, From)(From color) if(isXYZ!To && isxyY!From)
-{
-    alias F = To.ComponentType;
-    return To(F(color.Y/color.y*color.x), F(color.Y), F(color.Y/color.y*(F(1)-color.x-color.y)));
-}
-To convertColor(To, From)(From color) if(isXYZ!To && isRGB!From)
-{
-    import std.experimental.color.rgb: RGBColorSpaceDefs;
-
-    alias ToType = To.ComponentType;
-    alias FromType = From.ComponentType;
-    alias WorkType = WorkingType!(FromType, ToType);
-
-    // unpack the working values
-    auto src = color.tristimulus;
-    WorkType r = convertPixelType!WorkType(src[0]);
-    WorkType g = convertPixelType!WorkType(src[1]);
-    WorkType b = convertPixelType!WorkType(src[2]);
-
-    static if(From.linear == false)
-    {
-        r = toLinear!(From.colorSpace)(r);
-        g = toLinear!(From.colorSpace)(g);
-        b = toLinear!(From.colorSpace)(b);
-    }
-
-    // transform to XYZ
-    enum toXYZ = RGBColorSpaceMatrix!(From.colorSpace, WorkType);
-    WorkType[3] v = multiply(toXYZ, [r, g, b]);
-    return To(v[0], v[1], v[2]);
-}
-
-To convertColor(To, From)(From color) if(isxyY!To && isXYZ!From)
-{
-    alias F = To.ComponentType;
-    auto sum = color.X + color.Y + color.Z;
-    return To(F(color.X/sum), F(color.Y/sum), F(color.Y));
-}
-To convertColor(To, From)(From color) if(isxyY!To && isRGB!From)
-{
-    return to!To(XYZ!(To.ComponentType)(color));
-}
-
-
-
-
-
-
-// read hex strings in the standard forms: (#/$/0x)rgb/argb/rrggbb/aarrggbb
+/**
+* Create a color from hex strings in the standard forms: (#/$/0x)rgb/argb/rrggbb/aarrggbb
+*/
 Color colorFromString(Color = RGB8)(const(char)[] hex)
 {
     static ubyte val(ubyte c)
@@ -297,13 +307,8 @@ unittest
     static assert(colorFromString!RGBA8("#80CC4401") == RGBA8(0xCC,0x44, 0x01, 0x80));
 }
 
-// should we declare a to! function?
-Color to(Color)(const(char)[] color)
-{
-    return colorFromString(color);
-}
 
-
+package:
 
 // convert between pixel data types
 To convertPixelType(To, From)(From v) if(isValidComponentType!From && isValidComponentType!To)
@@ -445,4 +450,68 @@ unittest
     static assert(convertNormInt!short(byte(0x37)) == 0x376E);
     static assert(convertNormInt!short(byte(-109)) == -27866);
     static assert(convertNormInt!long(byte(-45)) == -3195498973398505005);
+}
+
+
+// try and use the preferred float type, but if the int type exceeds the preferred float precision, we'll upgrade the float
+template FloatTypeFor(IntType, RequestedFloat = float)
+{
+    static if(IntType.sizeof > 2)
+        alias FloatTypeFor = double;
+    else
+        alias FloatTypeFor = RequestedFloat;
+}
+
+// find the fastest type to do format conversion without losing precision
+template WorkingType(From, To)
+{
+    static if(isIntegral!From && isIntegral!To)
+    {
+        // small integer types can use float and not lose precision
+        static if(From.sizeof <= 2 && To.sizeof <= 2)
+            alias WorkingType = float;
+        else
+            alias WorkingType = double;
+    }
+    else static if(isIntegral!From && isFloatingPoint!To)
+        alias WorkingType = To;
+    else static if(isFloatingPoint!From && isIntegral!To)
+        alias WorkingType = FloatTypeFor!To;
+    else
+    {
+        static if(From.sizeof > To.sizeof)
+            alias WorkingType = From;
+        else
+            alias WorkingType = To;
+    }
+}
+
+// find the conversion path from one distant type to another
+template ConversionPath(From, To)
+{
+    template isParentType(Parent, Of)
+    {
+        static if(isXYZ!Of)
+            enum isParentType = false;
+        else static if(isInstanceOf!(TemplateOf!Parent, Of.ParentColor))
+            enum isParentType = true;
+        else
+            enum isParentType = isParentType!(Parent, Of.ParentColor);
+    }
+
+    template FindPath(From, To)
+    {
+        static if(isInstanceOf!(TemplateOf!To, From))
+            alias FindPath = TypeTuple!(To);
+        else static if(isParentType!(From, To))
+            alias FindPath = TypeTuple!(FindPath!(From, To.ParentColor), To);
+        else
+            alias FindPath = TypeTuple!(From, FindPath!(From.ParentColor, To));
+    }
+
+    alias Path = FindPath!(From, To);
+    static if(Path.length == 1 && !is(Path[0] == From))
+        alias ConversionPath = Path;
+    else
+        alias ConversionPath = Path[1..$];
 }
