@@ -1,12 +1,12 @@
 // Written in the D programming language.
 
 /**
-    This module implements an RGB _color type.
+    This module implements the RGB _color type.
 
     Authors:    Manu Evans
     Copyright:  Copyright (c) 2015, Manu Evans.
     License:    $(WEB boost.org/LICENSE_1_0.txt, Boost License 1.0)
-    Source:     $(PHOBOSSRC std/experimental/color/package.d)
+    Source:     $(PHOBOSSRC std/experimental/color/rgb.d)
 */
 module std.experimental.color.rgb;
 

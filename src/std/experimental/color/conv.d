@@ -1,3 +1,13 @@
+// Written in the D programming language.
+
+/**
+    This module implements various _color type conversions.
+
+    Authors:    Manu Evans
+    Copyright:  Copyright (c) 2015, Manu Evans.
+    License:    $(WEB boost.org/LICENSE_1_0.txt, Boost License 1.0)
+    Source:     $(PHOBOSSRC std/experimental/color/conv.d)
+*/
 module std.experimental.color.conv;
 
 import std.experimental.color;
@@ -7,10 +17,6 @@ import std.experimental.color.xyz;
 import std.traits: isNumeric, isIntegral, isFloatingPoint, isSigned, TemplateOf;
 import std.typetuple: TypeTuple;
 
-// TODO: convert function that finds a path from one color space to another, and performs intermediary conversions
-//...
-
-// function that implements gigantic conversion matrix
 
 /**
 Convert between color types.

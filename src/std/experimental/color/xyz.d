@@ -1,3 +1,13 @@
+// Written in the D programming language.
+
+/**
+    This module implements XYZ and xyY _color types.
+
+    Authors:    Manu Evans
+    Copyright:  Copyright (c) 2015, Manu Evans.
+    License:    $(WEB boost.org/LICENSE_1_0.txt, Boost License 1.0)
+    Source:     $(PHOBOSSRC std/experimental/color/xyz.d)
+*/
 module std.experimental.color.xyz;
 
 import std.experimental.color;
