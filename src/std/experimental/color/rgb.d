@@ -13,19 +13,25 @@ module std.experimental.color.rgb;
 import std.experimental.color;
 import std.experimental.color.conv;
 
-import std.traits: isInstanceOf, isNumeric, isIntegral, isFloatingPoint, isSigned, isSomeChar, Unqual;
-import std.typetuple: TypeTuple;
-import std.typecons: tuple;
+import std.traits : isInstanceOf, isNumeric, isIntegral, isFloatingPoint, isSigned, isSomeChar, Unqual;
+import std.typetuple : TypeTuple;
+import std.typecons : tuple;
 
-@safe: pure: nothrow: @nogc:
-
-enum isValidComponentType(T) = isIntegral!T || isFloatingPoint!T;
+@safe pure nothrow @nogc:
 
 
 /**
 Detect whether $(D T) is an RGB color.
 */
 enum isRGB(T) = isInstanceOf!(RGB, T);
+
+///
+unittest
+{
+    static assert(isRGB!(RGB!("bgr", ushort)) == true);
+    static assert(isRGB!LA8 == true);
+    static assert(isRGB!int == false);
+}
 
 
 // DEBATE: which should it be?
@@ -68,9 +74,10 @@ Params: components_ = Components that shall be available. Struct is populated wi
         linear_ = Color is stored with linear luminance.
         colorSpace_ = Color will be within the specified color space.
 */
-struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpace colorSpace_ = RGBColorSpace.sRGB) if(isValidComponentType!ComponentType_)
+struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpace colorSpace_ = RGBColorSpace.sRGB)
+    if(isNumeric!ComponentType_)
 {
-@safe: pure: nothrow: @nogc:
+@safe pure nothrow @nogc:
 
     // RGB colors may only contain components 'rgb', or 'l' (luminance)
     // They may also optionally contain an 'a' (alpha) component, and 'x' (unused) components
@@ -78,7 +85,6 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
     static assert(anyIn!("rgbal", components), "RGB colors must contain at least one component of r, g, b, l, a.");
     static assert(!canFind!(components, 'l') || !anyIn!("rgb", components), "RGB colors may not contain rgb AND luminance components together.");
 
-    // create members for some useful information
     /** Type of the color components. */
     alias ComponentType = ComponentType_;
     /** The color components that were specified. */
@@ -105,7 +111,6 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
     enum bool hasAlpha = hasComponent!'a';
 
 
-    // functions that return the color channels as a tuple
     /** Return the RGB tristimulus values as a tuple.
         These will always be ordered (R, G, B).
         Any color channels not present will be 0. */
@@ -126,6 +131,16 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
             return tuple(r, g, b);
         }
     }
+    ///
+    unittest
+    {
+        // BGR color
+        auto c = BGR8(255, 128, 10);
+
+        // tristimulus always returns tuple in RGB order
+        assert(c.tristimulus == tuple(10, 128, 255));
+    }
+
     /** Return the RGB tristimulus values + alpha as a tuple.
         These will always be ordered (R, G, B, A). */
     @property auto tristimulusWithAlpha() const
@@ -134,8 +149,16 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
             enum a = defaultAlpha!ComponentType;
         return tuple(tristimulus.expand, a);
     }
+    ///
+    unittest
+    {
+        // BGRA color
+        auto c = BGRA8(255, 128, 10, 80);
 
-    // RGB/A initialiser
+        // tristimulusWithAlpha always returns tuple in RGBA order
+        assert(c.tristimulusWithAlpha == tuple(10, 128, 255, 80));
+    }
+
     /** Construct a color from RGB and optional alpha values. */
     this(ComponentType r, ComponentType g, ComponentType b, ComponentType a = defaultAlpha!ComponentType)
     {
@@ -145,7 +168,6 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
             this.l = toGrayscale!(linear, colorSpace)(r, g, b); // ** Contentious? I this this is most useful
     }
 
-    // L/A initialiser
     /** Construct a color from a luminance and optional alpha value. */
     this(ComponentType l, ComponentType a = defaultAlpha!ComponentType)
     {
@@ -155,7 +177,6 @@ struct RGB(string components_, ComponentType_, bool linear_ = false, RGBColorSpa
             this.a = a;
     }
 
-    // hex string initialiser
     /** Construct a color from a hex string. */
     this(C)(const(C)[] hex) if(isSomeChar!C)
     {
@@ -224,7 +245,6 @@ private:
 }
 
 
-// gamma ramp conversions
 /** Convert a value from gamma compressed space to linear. */
 T toLinear(RGBColorSpace src, T)(T v) if(isFloatingPoint!T)
 {
