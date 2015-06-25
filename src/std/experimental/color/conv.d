@@ -13,6 +13,7 @@ module std.experimental.color.conv;
 import std.experimental.color;
 import std.experimental.color.rgb;
 import std.experimental.color.xyz;
+import std.experimental.color.hsx;
 
 import std.traits : isNumeric, isIntegral, isFloatingPoint, isSigned, isSomeChar, TemplateOf;
 import std.typetuple : TypeTuple;
@@ -183,6 +184,124 @@ To convertColor(To, From)(From color) if(isColor!To && isColor!From)
             return To(F(color.X/sum), F(color.Y/sum), F(color.Y));
     }
 
+    // *** HSx triplet ***
+    else static if(isHSx!From && isHSx!To)
+    {
+        // HACK: cast through RGB (this works fine, but could be faster)
+        return cast(To)cast(From.ParentColourSpace)from;
+    }
+    else static if(isHSx!From && isRGB!To)
+    {
+        import std.math : abs;
+
+        alias ToType = To.ComponentType;
+        alias WT = FloatTypeFor!ToType;
+
+        auto c = color.tupleof;
+        WT h = convertPixelType!WT(c[0]);
+        WT s = convertPixelType!WT(c[1]);
+        WT v = convertPixelType!WT(c[2]);
+
+        WT C, m;
+        static if(From.type == HSxType.HSV)
+        {
+            C = v*s;
+            m = v - C;
+        }
+        else static if(From.type == HSxType.HSL)
+        {
+            C = (1 - abs(2*v - 1))*s;
+            m = v - C/2;
+        }
+        else static if(From.type == HSxType.HSI)
+        {
+            static assert(false, "what goes here?");
+        }
+        else static if(From.type == HSxType.HCY)
+        {
+            C = s;
+        }
+
+        WT H = h/60;
+        WT X = C*(1 - abs(H%2.0 - 1));
+
+        WT r, g, b;
+        if(H < 1)
+            r = C, g = X, b = 0;
+        else if(H < 2)
+            r = X, g = C, b = 0;
+        else if(H < 3)
+            r = 0, g = C, b = X;
+        else if(H < 4)
+            r = 0, g = X, b = C;
+        else if(H < 5)
+            r = X, g = 0, b = C;
+        else if(H < 6)
+            r = C, g = 0, b = X;
+
+        static if(From.type == HSxType.HCY)
+        {
+//            m = v - (WT(0.3)*r + WT(0.59)*g + WT(0.11)*b); // Luma' (NTSC)
+            m = v - (WT(0.21)*r + WT(0.72)*g + WT(0.07)*b); // Luma' (sRGB)
+        }
+
+        return To(convertPixelType!ToType(r+m), convertPixelType!ToType(g+m), convertPixelType!ToType(b+m));
+    }
+    else static if(isRGB!From && isHSx!To)
+    {
+        import std.algorithm : min, max;
+        import std.math : abs;
+
+        alias ToType = To.ComponentType;
+        alias WT = FloatTypeFor!ToType;
+
+        auto c = color.tristimulus;
+        WT r = convertPixelType!WT(c[0]);
+        WT g = convertPixelType!WT(c[1]);
+        WT b = convertPixelType!WT(c[2]);
+
+        WT M = max(r, g, b);
+        WT m = min(r, g, b);
+        WT C = M-m;
+
+        // Calculate Hue
+        WT h;
+        if(C == 0)
+            h = 0;
+        else if(M == r)
+            h = WT(60) * ((g-b)/C % WT(6));
+        else if(M == g)
+            h = WT(60) * ((b-r)/C + WT(2));
+        else if(M == b)
+            h = WT(60) * ((r-g)/C + WT(4));
+
+        WT s, v;
+        static if(To.type == HSxType.HSV)
+        {
+            v = M; // 'Value'
+            s = v == 0 ? WT(0) : C/v; // Saturation
+        }
+        else static if(To.type == HSxType.HSL)
+        {
+            v = (M + m)/WT(2); // Lightness
+            s = (v == 0 || v == 1) ? WT(0) : C/(1 - abs(2*v - 1)); // Saturation
+        }
+        else static if(To.type == HSxType.HSI)
+        {
+            v = (r + g + b)/WT(3); // Intensity
+            s = v == 0 ? WT(0) : 1 - m/v; // Saturation
+        }
+        else static if(To.type == HSxType.HCY)
+        {
+//            v = WT(0.3)*r + WT(0.59)*g + WT(0.11)*b; // Luma' (NTSC)
+            v = WT(0.21)*r + WT(0.72)*g + WT(0.07)*b; // Luma' (sRGB)
+            static assert(false, "verify this algorithm!");
+            s = 0; // Chroma
+        }
+
+        return To(convertPixelType!ToType(h), convertPixelType!ToType(s), convertPixelType!ToType(v));
+    }
+
     // *** fallback plan ***
     else
     {
@@ -194,7 +313,7 @@ To convertColor(To, From)(From color) if(isColor!To && isColor!From)
 
 unittest
 {
-    // test format conversions
+    // test RGB format conversions
     alias UnsignedRGB = RGB!("rgb", ubyte);
     alias SignedRGBX = RGB!("rgbx", byte);
     alias FloatRGBA = RGB!("rgba", float);
@@ -235,6 +354,32 @@ unittest
 
     static assert(cast(xyYf)XYZf(0.5, 1, 0.5) == xyYf(0.25, 0.5, 1));
     static assert(cast(XYZf)xyYf(0.5, 0.5, 1) == XYZf(1, 1, 0));
+
+    // check the degenerate cases
+    static assert(cast(xyYf)XYZf(0, 0, 0) == xyYf(WhitePoint!float.D65.x, WhitePoint!float.D65.y, 0));
+    static assert(cast(XYZf)xyYf(0.5, 0, 1) == XYZf(0, 0, 0));
+
+    // test HSx conversions
+    alias HSVf = HSV!float;
+    alias HSLf = HSL!float;
+    alias HSIf = HSI!float;
+    alias HCYf = HCY!float;
+
+    static assert(cast(HSVf)RGB8(255, 0, 0) == HSVf(0, 1, 1));
+    static assert(cast(RGB8)HSVf(0, 1, 1) == RGB8(255, 0, 0));
+    static assert(cast(RGB8)HSVf(60, 0.5, 0.5) == RGB8(128, 128, 64));
+
+    static assert(cast(HSLf)RGB8(255, 0, 0) == HSLf(0, 1, 0.5));
+    static assert(cast(RGB8)HSLf(0, 1, 0.5) == RGB8(255, 0, 0));
+    static assert(cast(RGB8)HSLf(60, 0.5, 0.5) == RGB8(191, 191, 64));
+
+    static assert(cast(HSIf)RGB8(255, 0, 0) == HSIf(0, 1, 1.0/3));
+    static assert(cast(HSIf)RGB8(255, 255, 0) == HSIf(60, 1, 2.0/3));
+//    static assert(cast(RGB8)HSIf(0, 1, 1) == RGB8(1, 0, 0));
+
+//    pragma(msg, cast(RGB8)HCYf(0, 0, 1));
+//    static assert(cast(HCYf)RGB8(255, 0, 0) == HCYf(0, 1, 1));
+//    static assert(cast(RGB8)HCYf(0, 1, 1) == RGB8(1, 0, 0));
 
     //...
 }
@@ -335,7 +480,7 @@ To convertPixelType(To, From)(From v) if(isNumeric!From && isNumeric!To)
     }
     else static if(isIntegral!From && isFloatingPoint!To)
     {
-        import std.algorithm: max;
+        import std.algorithm : max;
         alias FP = FloatTypeFor!(From, To);
         static if(isSigned!From) // max(c, -1) is the signed conversion followed by D3D, OpenGL, etc.
             return To(max(v*FP(1.0/From.max), FP(-1.0)));

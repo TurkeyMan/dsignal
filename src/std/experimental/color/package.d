@@ -14,6 +14,7 @@ module std.experimental.color;
 
 public import std.experimental.color.rgb;
 import std.experimental.color.xyz : isXYZ, isxyY;
+import std.experimental.color.hsx : isHSx;
 
 @safe pure nothrow @nogc:
 
@@ -21,7 +22,7 @@ import std.experimental.color.xyz : isXYZ, isxyY;
 /**
 Detect whether $(D T) is a color type defined under std.color.
 */
-enum isColor(T) = isRGB!T || isXYZ!T || isxyY!T;
+enum isColor(T) = isRGB!T || isHSx!T || isXYZ!T || isxyY!T;
 
 ///
 unittest
