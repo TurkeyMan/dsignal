@@ -15,10 +15,86 @@ import std.c.stdlib;
 import std.algorithm: map, reduce, copy, sum, clamp;
 import std.range: chain;
 
-alias Lum = Color!("l", double, ColorSpace.sRGB_l);
+alias Lum = RGB!("l", double, true);
 
+/+
+struct Expression(string _op, T...)
+{
+	import std.traits;
+
+	static if(_op[0] == '#')
+		enum stringof = T[0].stringof;
+	else static if(T.length == 1)
+		enum stringof = _op~T[0].stringof;
+	else static if(T.length == 2)
+		enum stringof = "("~T[0].stringof~_op~T[1].stringof~")";
+
+	enum string op = _op;
+	alias V = T;
+
+	auto opUnary(string op)()
+	{
+		return Expression!(op, this)();
+	}
+	auto opBinary(string op, R)(R rh)
+	{
+		static assert(isInstanceOf!(Expression, R));
+		return Expression!(op, typeof(this), typeof(rh))();
+	}
+	auto opBinaryRight(string op, L)(L lh)
+	{
+		static assert(isInstanceOf!(Expression, L));
+		return Expression!(op, typeof(lh), typeof(this))();
+	}
+}
+
+auto Algebraic(alias T) = Expression!("#"~T.stringof, T)();
+
+enum bool isLiteral(alias v) = !__traits(compiles, &v);
+
+
+template Simplify(alias E)
+{
+	static if(E.op[0] == '#')
+		alias Simplify = E.V[0];
+	else static if(E.V.length == 1)
+		auto Simplify() { return mixin(E.op~"Simplify!(E.V[0])"); }
+	else static if(E.V.length == 2)
+		auto Simplify() { return mixin("Simplify!(E.V[0])"~E.op~"Simplify!(E.V[1])"); }
+}
+
+template TT(alias a, alias b)
+{
+	import std.typetuple: Alias;
+	alias TT = Alias!(a + b);
+}
+
+void algebraic()
+{
+	// x + 10 = 0
+
+	float x = 10;
+	auto a = Algebraic!x;
+	auto b = Algebraic!20.0f;
+	auto c = (a*a)+b-Algebraic!2;
+	pragma(msg, c.stringof);
+
+//	pragma(msg, Simplify!c);
+//	auto f = Simplify!c;
+
+	auto f = TT!(a, a);
+
+	auto ff = f;
+
+
+//	auto c = a+b;
+//	sqrt(Algebraic(10)^^2) * 10 + 100
+}
++/
 void main()
 {
+//	algebraic();
+
 //	testGraph();
 //	testGraph2();
 //	testSound();
@@ -212,7 +288,7 @@ void testSTFT()
 	enum Hop = 50;
 	enum FFTSize = nextPowerOf2(WindowSize);
 
-	float[WindowSize] window;
+	float[WindowSize] window = void;
 	generateWindow(WindowType.Hamming, window);
 
 	float sum = window[].sum;
@@ -223,7 +299,7 @@ void testSTFT()
 
 	STFT(s.samples, window[], amplitude, phase, Hop, FFTSize);
 
-	detectPeaks(amplitude[100], 0.5f);
+//	detectPeaks(amplitude[100], 0.5f);
 
 	ISTFT(amplitude, phase, s.samples, window.length, Hop, FFTSize);
 
@@ -239,4 +315,11 @@ void testSTFT()
 
 	s.save("synth.wav");
 //	system("start synth.wav");
+}
+
+extern (C) int tt()
+{
+	int a = 10;
+	int b = 2;
+	return a + b;
 }

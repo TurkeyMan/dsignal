@@ -200,22 +200,23 @@ To convertColor(To, From)(From color) if(isColor!To && isColor!From)
         auto c = color.tupleof;
         WT h = convertPixelType!WT(c[0]);
         WT s = convertPixelType!WT(c[1]);
-        WT v = convertPixelType!WT(c[2]);
+        WT x = convertPixelType!WT(c[2]);
 
         WT C, m;
         static if(From.type == HSxType.HSV)
         {
-            C = v*s;
-            m = v - C;
+            C = x*s;
+            m = x - C;
         }
         else static if(From.type == HSxType.HSL)
         {
-            C = (1 - abs(2*v - 1))*s;
-            m = v - C/2;
+            C = (1 - abs(2*x - 1))*s;
+            m = x - C/2;
         }
         else static if(From.type == HSxType.HSI)
         {
-            static assert(false, "what goes here?");
+            C = s;
+            m = x - (r+g+b)*WT(1.0/3.0);
         }
         else static if(From.type == HSxType.HCY)
         {
@@ -241,8 +242,8 @@ To convertColor(To, From)(From color) if(isColor!To && isColor!From)
 
         static if(From.type == HSxType.HCY)
         {
-//            m = v - (WT(0.3)*r + WT(0.59)*g + WT(0.11)*b); // Luma' (NTSC)
-            m = v - (WT(0.21)*r + WT(0.72)*g + WT(0.07)*b); // Luma' (sRGB)
+            enum YAxis = RGBColorSpaceMatrix!(From.colorSpace, WT)[1];
+            m = x - (YAxis[0]*r + YAxis[1]*g + YAxis[2]*b); // Derive from Luma'
         }
 
         return To(convertPixelType!ToType(r+m), convertPixelType!ToType(g+m), convertPixelType!ToType(b+m));
@@ -275,31 +276,30 @@ To convertColor(To, From)(From color) if(isColor!To && isColor!From)
         else if(M == b)
             h = WT(60) * ((r-g)/C + WT(4));
 
-        WT s, v;
+        WT s, x;
         static if(To.type == HSxType.HSV)
         {
-            v = M; // 'Value'
-            s = v == 0 ? WT(0) : C/v; // Saturation
+            x = M; // 'Value'
+            s = x == 0 ? WT(0) : C/x; // Saturation
         }
         else static if(To.type == HSxType.HSL)
         {
-            v = (M + m)/WT(2); // Lightness
-            s = (v == 0 || v == 1) ? WT(0) : C/(1 - abs(2*v - 1)); // Saturation
+            x = (M + m)/WT(2); // Lightness
+            s = (x == 0 || x == 1) ? WT(0) : C/(1 - abs(2*x - 1)); // Saturation
         }
         else static if(To.type == HSxType.HSI)
         {
-            v = (r + g + b)/WT(3); // Intensity
-            s = v == 0 ? WT(0) : 1 - m/v; // Saturation
+            x = (r + g + b)/WT(3); // Intensity
+            s = x == 0 ? WT(0) : 1 - m/x; // Saturation
         }
         else static if(To.type == HSxType.HCY)
         {
-//            v = WT(0.3)*r + WT(0.59)*g + WT(0.11)*b; // Luma' (NTSC)
-            v = WT(0.21)*r + WT(0.72)*g + WT(0.07)*b; // Luma' (sRGB)
-            static assert(false, "verify this algorithm!");
-            s = 0; // Chroma
+            enum YAxis = RGBColorSpaceMatrix!(To.colorSpace, WT)[1];
+            x = YAxis[0]*r + YAxis[1]*g + YAxis[2]*b; // Luma'
+            s = C; // Chroma
         }
 
-        return To(convertPixelType!ToType(h), convertPixelType!ToType(s), convertPixelType!ToType(v));
+        return To(convertPixelType!ToType(h), convertPixelType!ToType(s), convertPixelType!ToType(x));
     }
 
     // *** fallback plan ***
@@ -470,6 +470,8 @@ unittest
 
 package:
 
+import std.experimental.color.internal.normint;
+
 // convert between pixel data types
 To convertPixelType(To, From)(From v) if(isNumeric!From && isNumeric!To)
 {
@@ -497,128 +499,6 @@ To convertPixelType(To, From)(From v) if(isNumeric!From && isNumeric!To)
     }
     else
         return To(v);
-}
-
-
-// converts directly between fixed-point color types, without doing float conversions
-// ** this should be tested for performance; we can optimise the small->large conversions with table lookups
-To convertNormInt(To, From)(From i) if(isIntegral!To && isIntegral!From)
-{
-    import std.traits: isUnsigned, Unsigned;
-    template Iota(alias start, alias end)
-    {
-        static if(end == start)
-            alias Iota = TypeTuple!();
-        else
-            alias Iota = TypeTuple!(Iota!(start, end-1), end-1);
-    }
-    enum Bits(T) = T.sizeof*8;
-
-    static if(isUnsigned!To && isUnsigned!From)
-    {
-        static if(Bits!To <= Bits!From)
-            return To(i >> (Bits!From-Bits!To));
-        else
-        {
-            To r;
-
-            enum numReps = Bits!To/Bits!From;
-            foreach(j; Iota!(0, numReps))
-                r |= To(i) << (j*Bits!From);
-
-            return r;
-        }
-    }
-    else static if(isUnsigned!To)
-    {
-        if(i < 0) // if i is negative, return 0
-            return 0;
-        else
-        {
-            enum Sig = Bits!From-1;
-            static if(Bits!To < Bits!From)
-                return cast(To)(i >> (Sig-Bits!To));
-            else
-            {
-                To r;
-
-                enum numReps = Bits!To/Sig;
-                foreach(j; Iota!(1, numReps+1))
-                    r |= To(cast(Unsigned!From)(i&From.max)) << (Bits!To - j*Sig);
-
-                enum remain = Bits!To - numReps*Sig;
-                static if(remain)
-                    r |= cast(Unsigned!From)(i&From.max) >> (Sig - remain);
-
-                return r;
-            }
-        }
-    }
-    else static if(isUnsigned!From)
-    {
-        static if(Bits!To <= Bits!From)
-            return To(i >> (Bits!From-Bits!To+1));
-        else
-        {
-            Unsigned!To r;
-
-            enum numReps = Bits!To/Bits!From;
-            foreach(j; Iota!(0, numReps))
-                r |= Unsigned!To(i) << (j*Bits!From);
-
-            return To(r >> 1);
-        }
-    }
-    else
-    {
-        static if(Bits!To <= Bits!From)
-            return cast(To)(i >> (Bits!From-Bits!To));
-        else
-        {
-            enum Sig = Bits!From-1;
-            enum Fill = Bits!To - Bits!From;
-
-            To r = To(i) << Fill;
-
-            enum numReps = Fill/Sig;
-            foreach(j; Iota!(1, numReps+1))
-                r |= Unsigned!To(cast(Unsigned!From)(i&From.max)) << (Fill - j*Sig);
-
-            enum remain = Fill - numReps*Sig;
-            static if(remain)
-                r |= cast(Unsigned!From)(i&From.max) >> (Sig - remain);
-
-            return r;
-        }
-    }
-}
-
-unittest
-{
-    // static asserts since these should all ctfe:
-
-    // unsigned -> unsigned
-    static assert(convertNormInt!ubyte(ushort(0x3765)) == 0x37);
-    static assert(convertNormInt!ushort(ubyte(0x37)) == 0x3737);
-    static assert(convertNormInt!ulong(ubyte(0x35)) == 0x3535353535353535);
-
-    // signed -> unsigned
-    static assert(convertNormInt!ubyte(short(-61)) == 0);
-    static assert(convertNormInt!ubyte(short(0x3795)) == 0x6F);
-    static assert(convertNormInt!ushort(byte(0x37)) == 0x6EDD);
-    static assert(convertNormInt!ulong(byte(0x35)) == 0x6AD5AB56AD5AB56A);
-
-    // unsigned -> signed
-    static assert(convertNormInt!byte(ushort(0x3765)) == 0x1B);
-    static assert(convertNormInt!short(ubyte(0x37)) == 0x1B9B);
-    static assert(convertNormInt!long(ubyte(0x35)) == 0x1A9A9A9A9A9A9A9A);
-
-    // signed -> signed
-    static assert(convertNormInt!byte(short(0x3795)) == 0x37);
-    static assert(convertNormInt!byte(short(-28672)) == -112);
-    static assert(convertNormInt!short(byte(0x37)) == 0x376E);
-    static assert(convertNormInt!short(byte(-109)) == -27866);
-    static assert(convertNormInt!long(byte(-45)) == -3195498973398505005);
 }
 
 

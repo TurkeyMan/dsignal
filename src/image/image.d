@@ -236,7 +236,7 @@ void save(Img)(Img img, const(char)[] filename, ImageFormat format = ImageFormat
 
 	assert(w <= ushort.max && h <= ushort.max, "Image is too large!");
 
-	ubyte[] buffer = new ubyte[TgaHeader.sizeof + img.width*img.height*RGB.sizeof];
+	ubyte[] buffer = new ubyte[TgaHeader.sizeof + img.width*img.height*BGR8.sizeof];
 	buffer[0..18] = 0;
 
 	TgaHeader* header = cast(TgaHeader*)&buffer[0];
@@ -246,12 +246,12 @@ void save(Img)(Img img, const(char)[] filename, ImageFormat format = ImageFormat
 	header.bpp = 24;
 	header.flags = 0x20;
 
-	BGR[] image = (cast(BGR*)&buffer[18])[0 .. w*h];
+	BGR8[] image = (cast(BGR8*)&buffer[18])[0 .. w*h];
 	size_t i = 0;
 	foreach(y; 0..h)
 	{
 		foreach(x; 0..w)
-			image[i++] = to!BGR(img[x, y]);
+			image[i++] = cast(BGR8)img[x, y];
 	}
 
 	import std.file;

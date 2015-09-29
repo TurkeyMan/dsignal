@@ -218,6 +218,21 @@ enum Colors
     yellowGreen          = RGB8(154,205,50)
 }
 
+// TODO: this may be an array of colors, or an array of tuples of (color, blend_factor)'s
+C blend(C)(C[] src...) if(isRGB!C)
+{
+
+    return C();
+}
+
+unittest
+{
+    RGB8 a, b;
+    blend(a, b);
+
+    RGB8[3] cc = [a,b,b];
+    blend!RGB8(cc, [0xFF, 0x00, 0x80]);
+}
 
 // some common color operations
 C lerp(C, F)(C a, C b, F t)
@@ -246,6 +261,11 @@ C blend(C, F)(C src, C dest, F srcFactor, F destFactor, F srcAlphaFactor, F dest
     return r;
 }
 
+void t()
+{
+    ubyte x;
+    x = -x;
+}
 
 package:
 
@@ -266,6 +286,22 @@ template ComponentExpression(string expression, string component, string op)
     enum ComponentExpression =
         "static if(is(typeof(this." ~ component ~ ")))" ~ "\n\t" ~
             BuildExpression!(expression, component, op);
+}
+
+struct ColorComponent(T) if(isNumeric!T)
+{
+    T c;
+
+    typeof(this) opBinary(string op, S)(S rh) const if(isNumeric!S && (op == "+" || op == "-"))
+    {
+
+    }
+    typeof(this) opBinary(string op, S)(S rh) const if(isNumeric!S && (op == "*" || op == "/"))
+    {
+    }
+    typeof(this) opBinary(string op, S)(S rh) const if(isNumeric!S && (op == "^^"))
+    {
+    }
 }
 
 mixin template ColorOperators(Components...)

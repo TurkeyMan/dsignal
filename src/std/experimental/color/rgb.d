@@ -296,6 +296,10 @@ struct RGBColorSpaceDef(F)
 enum RGBColorSpaceDefs(F) = [
     RGBColorSpaceDef!F("sRGB",           &linearTosRGB!F,         &sRGBToLinear!F,         WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.212656), xyY!F(0.3000, 0.6000, 0.715158), xyY!F(0.1500, 0.0600, 0.072186)),
     RGBColorSpaceDef!F("sRGB Simple",    &linearToGamma!(F, 2.2), &gammaToLinear!(F, 2.2), WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.212656), xyY!F(0.3000, 0.6000, 0.715158), xyY!F(0.1500, 0.0600, 0.072186)),
+
+//    RGBColorSpaceDef!F("Rec601",           &linearTosRGB!F,         &sRGBToLinear!F,         WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.299),    xyY!F(0.3000, 0.6000, 0.587),    xyY!F(0.1500, 0.0600, 0.114)),
+//    RGBColorSpaceDef!F("Rec709",           &linearTosRGB!F,         &sRGBToLinear!F,         WhitePoint!F.D65, xyY!F(0.6400, 0.3300, 0.212656), xyY!F(0.3000, 0.6000, 0.715158), xyY!F(0.1500, 0.0600, 0.072186)),
+//    RGBColorSpaceDef!F("Rec2020",          &linearToRec2020!F,      &Rec2020ToLinear!F,      WhitePoint!F.D65, xyY!F(0.708,  0.292,  0.2627),   xyY!F(0.170,  0.797,  0.6780),   xyY!F(0.131,  0.046,  0.0593)),
 ];
 
 template RGBColorSpaceMatrix(RGBColorSpace cs, F)
@@ -354,12 +358,11 @@ T toGrayscale(bool linear, RGBColorSpace colorSpace = RGBColorSpace.sRGB, T)(T r
     }
     else
     {
-        // precise; convert to linear, then convert
-        return toGamma!colorSpace(YAxis[0]*toLinear!colorSpace(r) + YAxis[1]*toLinear!colorSpace(g) + YAxis[2]*toLinear!colorSpace(b));
+        // sRGB Luma' coefficients match the Y axis. Assume other RGB color spaces also follow the same pattern(?)
+        // Rec.709 (HDTV) was also refined to suit, so it will work without special-case
+        // TODO: When we support Rec.601 (SDTV), we need to special-case for Luma' coefficients: 0.299, 0.587, 0.114
 
-        // fast (standardised) approximations, performed in sRGB gamma space
-//        return T(0.299)*r + T(0.587)*g + T(0.114)*b; // Y'UV (PAL/NSTC/SECAM)
-//        return T(0.2126)*r + T(0.7152)*g + T(0.0722)*b; // HDTV
+        return YAxis[0]*r + YAxis[1]*g + YAxis[2]*b;
     }
 }
 T toGrayscale(bool linear, RGBColorSpace colorSpace = RGBColorSpace.sRGB, T)(T r, T g, T b) pure if(isIntegral!T)

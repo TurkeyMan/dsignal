@@ -36,7 +36,7 @@ Alias for a HSI color.
 alias HSI(CT = float, RGBColorSpace cs = RGBColorSpace.sRGB) = HSx!(HSxType.HSI, CT, cs);
 
 /**
-Alias for a HCY color.
+Alias for a HCY' color.
 */
 alias HCY(CT = float, RGBColorSpace cs = RGBColorSpace.sRGB) = HSx!(HSxType.HCY, CT, cs);
 
@@ -56,7 +56,7 @@ enum HSxType
 }
 
 /**
-HSx color space is used to describe a suite of angular color spaces including HSL, HSV, HSI, HCY.
+HSx color space is used to describe a suite of angular color spaces including HSL, HSV, HSI, HSY.
 */
 struct HSx(HSxType type_, CT = float, RGBColorSpace colorSpace_ = RGBColorSpace.sRGB) if(isFloatingPoint!CT || isUnsigned!CT)
 {
@@ -109,4 +109,43 @@ unittest
     // test HSL operators and functions
     static assert(HSLf(3.1415, 0.2, 0.5) + HSLf(0, 0.5, 0.5) == HSLf(3.1415, 0.7, 1));
     static assert(HSLf(2, 0.5, 1) * 100.0 == HSLf(200, 50, 100));
+}
+
+///
+unittest
+{
+    // HSV color with float components
+    alias HSVf = HSx!(HSxType.HSV, float);
+
+    HSVf c = HSVf(3.1415, 1, 0.5);
+
+    // test HSV operators and functions
+    static assert(HSVf(3.1415, 0.2, 0.5) + HSVf(0, 0.5, 0.5) == HSVf(3.1415, 0.7, 1));
+    static assert(HSVf(2, 0.5, 1) * 100.0 == HSVf(200, 50, 100));
+}
+
+///
+unittest
+{
+    // HSI color with float components
+    alias HSIf = HSx!(HSxType.HSI, float);
+
+    HSIf c = HSIf(3.1415, 1, 0.5);
+
+    // test HSI operators and functions
+    static assert(HSIf(3.1415, 0.2, 0.5) + HSIf(0, 0.5, 0.5) == HSIf(3.1415, 0.7, 1));
+    static assert(HSIf(2, 0.5, 1) * 100.0 == HSIf(200, 50, 100));
+}
+
+///
+unittest
+{
+    // HCY color with float components
+    alias HCYf = HSx!(HSxType.HCY, float);
+
+    HCYf c = HCYf(3.1415, 1, 0.5);
+
+    // test HCY operators and functions
+    static assert(HCYf(3.1415, 0.2, 0.5) + HCYf(0, 0.5, 0.5) == HCYf(3.1415, 0.7, 1));
+    static assert(HCYf(2, 0.5, 1) * 100.0 == HCYf(200, 50, 100));
 }

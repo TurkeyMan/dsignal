@@ -198,19 +198,19 @@ struct LineGraphParams
 	float lineWidth = 1;
 	float pointWidth = 3;
 
-	RGB gbColor = RGB(255,255,255);
-	RGB lineColor = RGB(0,0,0);
-	RGB hGuideColor = RGB(224,224,224);
-	RGB vGuideColor = RGB(224,224,224);
-	RGB edgeColor = RGB(0,0,0);
-	RGB ticColor = RGB(0,0,0);
+	RGB8 gbColor = RGB8(255,255,255);
+	RGB8 lineColor = RGB8(0,0,0);
+	RGB8 hGuideColor = RGB8(224,224,224);
+	RGB8 vGuideColor = RGB8(224,224,224);
+	RGB8 edgeColor = RGB8(0,0,0);
+	RGB8 ticColor = RGB8(0,0,0);
 
 	uint flags = LineGraphFlags.Lines;
 }
 
 
 
-alias lRGB = Color!("rgb", double, ColorSpace.sRGB_l);
+alias lRGB = RGB!("rgb", double, true);
 
 auto plotWaveform(F)(F[] signal, size_t width, size_t height)
 {
